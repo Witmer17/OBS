@@ -13,7 +13,7 @@ import java.math.BigDecimal;
 public class DespachoSolicitadoEvento {
     private String tipoEvento;
     private Long ordenId;
-    private Long idCliente;
+    private String idCliente;
     private String direccionEnvio;
     private BigDecimal total;
     private String origen;

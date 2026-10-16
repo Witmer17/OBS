@@ -29,7 +29,7 @@ public class OrdenServiceImpl implements OrdenService {
 
     @Override
     @Transactional
-    public OrdenResponse crear(OrdenRequest request, Long idCliente) {
+    public OrdenResponse crear(OrdenRequest request, String idCliente) {
         String direccion = (request.getDireccionCliente() != null && !request.getDireccionCliente().isBlank())
                 ? request.getDireccionCliente()
                 : "Av. Brasil 123, Lima";

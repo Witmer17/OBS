@@ -52,7 +52,7 @@ class OrdenCompensacionEnvioTest {
 
         Orden orden = Orden.builder()
                 .id(1L)
-                .idCliente(5L)
+                .idCliente("user-5")
                 .direccionCliente("ZONA_NO_COBERTURA Cerro Azul")
                 .estado(EstadoOrden.PAGADA)
                 .total(new BigDecimal("100.00"))
@@ -83,7 +83,7 @@ class OrdenCompensacionEnvioTest {
 
         Orden orden = Orden.builder()
                 .id(2L)
-                .idCliente(6L)
+                .idCliente("user-6")
                 .direccionCliente("ZONA_NO_COBERTURA Cerro Azul")
                 .estado(EstadoOrden.CANCELADA_ENVIO) // Ya en estado final de compensación
                 .total(new BigDecimal("100.00"))
@@ -107,7 +107,7 @@ class OrdenCompensacionEnvioTest {
         // Arrange
         Orden orden = Orden.builder()
                 .id(3L)
-                .idCliente(7L)
+                .idCliente("user-7")
                 .direccionCliente("Av. Brasil 123, Lima")
                 .estado(EstadoOrden.PAGADA)
                 .total(new BigDecimal("200.00"))
@@ -128,7 +128,7 @@ class OrdenCompensacionEnvioTest {
         // Arrange
         Orden orden = Orden.builder()
                 .id(4L)
-                .idCliente(8L)
+                .idCliente("user-8")
                 .direccionCliente("Av. Los Pinos 789")
                 .estado(EstadoOrden.PENDIENTE_PAGO)
                 .total(new BigDecimal("120.00"))
