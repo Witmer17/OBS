@@ -1,0 +1,46 @@
+name: pagatu-obs-dev
+
+services:
+  pagatu-prometheus:
+    image: prom/prometheus:v3.14.0
+    container_name: pagatu-prometheus-dev
+    restart: unless-stopped
+    ports:
+      - "19090:9090"
+    volumes:
+      - ./prometheus/prometheus-dev.yml:/etc/prometheus/prometheus.yml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  pagatu-loki:
+    image: grafana/loki:3.7.6
+    container_name: pagatu-loki-dev
+    restart: unless-stopped
+    ports:
+      - "13100:3100"
+
+  pagatu-promtail:
+    image: grafana/promtail:3.6.8
+    container_name: pagatu-promtail-dev
+    restart: unless-stopped
+    volumes:
+      - ./promtail/promtail-config-dev.yml:/etc/promtail/config.yml:ro
+      - ../services/pagatu-catalogo-ms/logs:/var/log/pagatu-catalogo-ms:ro
+      - ../services/pagatu-orden-ms/logs:/var/log/pagatu-orden-ms:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - pagatu-loki
+
+  pagatu-grafana:
+    image: grafana/grafana:11.4.0
+    container_name: pagatu-grafana-dev
+    restart: unless-stopped
+    ports:
+      - "13000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - pagatu-prometheus
+      - pagatu-loki

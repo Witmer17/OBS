@@ -1,0 +1,201 @@
+package pe.edu.upeu.orden.service;
+
+import pe.edu.upeu.orden.dto.*;
+import pe.edu.upeu.orden.event.DespachoSolicitadoEvento;
+import pe.edu.upeu.orden.event.OrdenCreadaEvento;
+import pe.edu.upeu.orden.messaging.OrdenEventosProducer;
+import pe.edu.upeu.orden.entity.EstadoOrden;
+import pe.edu.upeu.orden.entity.Orden;
+import pe.edu.upeu.orden.entity.OrdenDetalle;
+import pe.edu.upeu.orden.repository.OrdenRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class OrdenServiceImpl implements OrdenService {
+
+    private final OrdenRepository ordenRepository;
+    private final ProductoConsultaService productoConsultaService;
+    private final OrdenEventosProducer producer;
+
+    @Override
+    @Transactional
+    public OrdenResponse crear(OrdenRequest request, Long idCliente) {
+        String direccion = (request.getDireccionCliente() != null && !request.getDireccionCliente().isBlank())
+                ? request.getDireccionCliente()
+                : "Av. Brasil 123, Lima";
+
+        Orden orden = Orden.builder()
+                .idCliente(idCliente)
+                .metodoPago(request.getMetodoPago())
+                .direccionCliente(direccion)
+                .build();
+
+        List<OrdenDetalle> detalles = new ArrayList<>();
+        BigDecimal total = BigDecimal.ZERO;
+        boolean validacionCompleta = true;
+
+        for (DetalleOrdenRequest item : request.getDetalles()) {
+            ProductoDto producto = productoConsultaService.consultarProducto(item.getIdProducto());
+            boolean stockReservado = producto != null
+                    && productoConsultaService.descontarStock(item.getIdProducto(), item.getCantidad());
+
+            if (!stockReservado) {
+                validacionCompleta = false;
+                detalles.add(OrdenDetalle.builder()
+                        .orden(orden)
+                        .idProducto(item.getIdProducto())
+                        .nombreProducto(null)
+                        .cantidad(item.getCantidad())
+                        .precioUnitario(null)
+                        .build());
+                continue;
+            }
+
+            BigDecimal subtotal = producto.getPrecio()
+                    .multiply(BigDecimal.valueOf(item.getCantidad()));
+            total = total.add(subtotal);
+
+            detalles.add(OrdenDetalle.builder()
+                    .orden(orden)
+                    .idProducto(item.getIdProducto())
+                    .nombreProducto(producto.getNombre())
+                    .cantidad(item.getCantidad())
+                    .precioUnitario(producto.getPrecio())
+                    .build());
+        }
+
+        orden.setDetalles(detalles);
+        orden.setTotal(validacionCompleta ? total : null);
+        orden.setEstado(validacionCompleta ? EstadoOrden.PENDIENTE_PAGO : EstadoOrden.CARRITO);
+
+        Orden guardada = ordenRepository.save(orden);
+
+        if (guardada.getEstado() == EstadoOrden.PENDIENTE_PAGO) {
+            producer.publicarTrasCommit(OrdenCreadaEvento.builder()
+                    .tipoEvento("orden.creada")
+                    .ordenId(guardada.getId())
+                    .idCliente(guardada.getIdCliente())
+                    .total(guardada.getTotal())
+                    .metodoPago(guardada.getMetodoPago())
+                    .origen("pagatu-orden-ms")
+                    .timestamp(Instant.now().toEpochMilli())
+                    .build());
+        }
+        return toResponse(guardada);
+    }
+
+    @Override
+    @Transactional
+    public void marcarPagada(Long ordenId) {
+        Orden orden = ordenRepository.findById(ordenId).orElse(null);
+        if (orden == null || orden.getEstado() != EstadoOrden.PENDIENTE_PAGO) {
+            log.warn("component=processor ordenId={} status=ignored motivo=\"la orden no existe o no esta pendiente de pago\"", ordenId);
+            return;
+        }
+        orden.setEstado(EstadoOrden.PAGADA);
+        log.info("component=processor ordenId={} estado={} status=processed", ordenId, orden.getEstado());
+
+        // Disparar proceso autonomo de despacho / envio
+        producer.publicarDespachoTrasCommit(DespachoSolicitadoEvento.builder()
+                .tipoEvento("despacho.solicitado")
+                .ordenId(orden.getId())
+                .idCliente(orden.getIdCliente())
+                .direccionEnvio(orden.getDireccionCliente())
+                .total(orden.getTotal())
+                .origen("pagatu-orden-ms")
+                .timestamp(Instant.now().toEpochMilli())
+                .build());
+    }
+
+    @Override
+    @Transactional
+    public void marcarDespachada(Long ordenId) {
+        Orden orden = ordenRepository.findById(ordenId).orElse(null);
+        if (orden == null || orden.getEstado() != EstadoOrden.PAGADA) {
+            log.warn("component=processor ordenId={} status=ignored motivo=\"la orden no existe o ya no esta pendiente de despacho\"", ordenId);
+            return;
+        }
+        orden.setEstado(EstadoOrden.DESPACHADA);
+        log.info("component=processor ordenId={} estado={} status=processed", ordenId, orden.getEstado());
+    }
+
+    @Override
+    @Transactional
+    public void compensarEnvio(Long ordenId) {
+        Orden orden = ordenRepository.findById(ordenId).orElse(null);
+        if (orden == null || orden.getEstado() != EstadoOrden.PAGADA) {
+            log.warn("component=processor ordenId={} status=ignored motivo=\"la orden no existe o ya no esta en estado valido para compensar envio\"", ordenId);
+            return;
+        }
+        for (OrdenDetalle detalle : orden.getDetalles()) {
+            productoConsultaService.restaurarStock(detalle.getIdProducto(), detalle.getCantidad());
+        }
+        orden.setEstado(EstadoOrden.CANCELADA_ENVIO);
+        log.info("component=processor ordenId={} estado={} status=compensated", ordenId, orden.getEstado());
+    }
+
+    @Override
+    @Transactional
+    public void compensar(Long ordenId) {
+        Orden orden = ordenRepository.findById(ordenId).orElse(null);
+        if (orden == null || orden.getEstado() != EstadoOrden.PENDIENTE_PAGO) {
+            log.warn("component=processor ordenId={} status=ignored motivo=\"la orden no existe o ya no esta pendiente de pago\"", ordenId);
+            return;
+        }
+        for (OrdenDetalle detalle : orden.getDetalles()) {
+            productoConsultaService.restaurarStock(detalle.getIdProducto(), detalle.getCantidad());
+        }
+        orden.setEstado(EstadoOrden.CANCELADA);
+        log.info("component=processor ordenId={} estado={} status=compensated", ordenId, orden.getEstado());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public OrdenResponse findById(Long id) {
+        Orden orden = ordenRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Orden no encontrada: " + id));
+        return toResponse(orden);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<OrdenResponse> listar() {
+        return ordenRepository.findAll().stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
+    }
+
+    private OrdenResponse toResponse(Orden orden) {
+        List<DetalleOrdenResponse> detalles = orden.getDetalles().stream()
+                .map(d -> DetalleOrdenResponse.builder()
+                        .idProducto(d.getIdProducto())
+                        .nombreProducto(d.getNombreProducto())
+                        .cantidad(d.getCantidad())
+                        .precioUnitario(d.getPrecioUnitario())
+                        .subtotal(d.getPrecioUnitario() == null
+                                ? null
+                                : d.getPrecioUnitario().multiply(BigDecimal.valueOf(d.getCantidad())))
+                        .build())
+                .collect(Collectors.toList());
+
+        return OrdenResponse.builder()
+                .id(orden.getId())
+                .idCliente(orden.getIdCliente())
+                .fechaCreacion(orden.getFechaCreacion())
+                .estado(orden.getEstado().name())
+                .direccionCliente(orden.getDireccionCliente())
+                .total(orden.getTotal())
+                .detalles(detalles)
+                .build();
+    }
+}

@@ -1,0 +1,53 @@
+server:
+  port: 18080
+
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: http://localhost:8085/.well-known/jwks.json
+  cloud:
+    gateway:
+      server:
+        webmvc:
+          routes:
+            - id: pagatu-catalogo-categorias
+              uri: lb://pagatu-catalogo-ms
+              predicates:
+                - Path=/api/v1/categorias/**
+            - id: pagatu-catalogo-productos
+              uri: lb://pagatu-catalogo-ms
+              predicates:
+                - Path=/api/v1/productos/**
+            - id: pagatu-orden-ordenes
+              uri: lb://pagatu-orden-ms
+              predicates:
+                - Path=/api/v1/ordenes/**
+
+            - id: pagatu-auth-login
+              uri: lb://pagatu-auth-ms
+              predicates:
+                - Path=/api/v1/auth/**
+
+            - id: pagatu-envio-envios
+              uri: lb://pagatu-envio-ms
+              predicates:
+                - Path=/api/v1/envios/**
+
+eureka:
+  instance:
+    hostname: localhost
+    instance-id: ${spring.application.name}:${server.port}
+  client:
+    service-url:
+      defaultZone: http://localhost:18761/eureka
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always

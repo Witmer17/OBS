@@ -1,0 +1,46 @@
+name: pagatu-infra-prod
+
+services:
+  pagatu-config:
+    build:
+      context: ./pagatu-config
+      dockerfile: Dockerfile
+    container_name: pagatu-config
+    restart: unless-stopped
+    ports:
+      - "28888:8888"
+    volumes:
+      - ./pagatu-config/config-repo:/config-repo
+    environment:
+      SERVER_PORT: 8888
+      SPRING_PROFILES_ACTIVE: native
+      CONFIG_REPO_LOCATION: file:/config-repo
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/8888' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    networks:
+      - pagatu-prod-net
+
+  pagatu-eureka:
+    build:
+      context: ./pagatu-eureka
+      dockerfile: Dockerfile
+    container_name: pagatu-eureka
+    restart: unless-stopped
+    ports:
+      - "28761:8761"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      CONFIG_SERVER_URL: http://pagatu-config:8888
+    depends_on:
+      pagatu-config:
+        condition: service_healthy
+    networks:
+      - pagatu-prod-net
+
+networks:
+  pagatu-prod-net:
+    name: pagatu-prod-net

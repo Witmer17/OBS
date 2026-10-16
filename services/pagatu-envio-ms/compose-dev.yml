@@ -1,0 +1,19 @@
+name: pagatu-envio-dev
+
+services:
+  postgres-envio-dev:
+    image: postgres:16-alpine
+    container_name: pagatu-postgres-envio-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pagatu_envio_db
+      POSTGRES_USER: pagatu
+      POSTGRES_PASSWORD: pagatu
+    ports:
+      - "15436:5432"
+    volumes:
+      - pagatu_envio_dev_data:/var/lib/postgresql/data
+
+volumes:
+  pagatu_envio_dev_data:
+

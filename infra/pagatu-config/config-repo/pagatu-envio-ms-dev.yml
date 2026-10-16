@@ -1,0 +1,78 @@
+server:
+  port: 8087
+
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: http://localhost:8085/.well-known/jwks.json
+  datasource:
+    url: jdbc:postgresql://localhost:15436/pagatu_envio_db
+    username: pagatu
+    password: pagatu
+    driver-class-name: org.postgresql.Driver
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+  devtools:
+    restart:
+      enabled: true
+    livereload:
+      enabled: true
+  kafka:
+    bootstrap-servers: localhost:19092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
+      properties:
+        spring.json.add.type.headers: false
+    consumer:
+      group-id: pagatu-envio-ms
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      properties:
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JacksonJsonDeserializer
+        spring.json.value.default.type: pe.edu.upeu.envio.event.DespachoSolicitadoEvento
+        spring.json.trusted.packages: pe.edu.upeu.envio.event
+        spring.json.use.type.headers: false
+
+app:
+  kafka:
+    topic:
+      despachos: despacho-eventos
+      envios: envio-eventos
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  level:
+    pe.edu.upeu.envio: DEBUG
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+eureka:
+  instance:
+    hostname: localhost
+    instance-id: ${spring.application.name}:${server.port}
+  client:
+    service-url:
+      defaultZone: http://localhost:18761/eureka
+
