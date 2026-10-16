@@ -26,4 +26,11 @@ public class PagoController {
     public PagoResponse obtener(@PathVariable Long id) {
         return pagoService.obtener(id);
     }
+
+    @GetMapping("/por-orden/{ordenId}")
+    public org.springframework.http.ResponseEntity<PagoResponse> buscarPorOrden(@PathVariable Long ordenId) {
+        return pagoService.buscarPorOrden(ordenId)
+                .map(org.springframework.http.ResponseEntity::ok)
+                .orElseGet(() -> org.springframework.http.ResponseEntity.notFound().build());
+    }
 }

@@ -88,6 +88,11 @@ public class PagoServiceImpl implements PagoService {
         return pagoMapper.toResponse(buscarOFallar(id));
     }
 
+    @Override
+    public java.util.Optional<PagoResponse> buscarPorOrden(Long ordenId) {
+        return pagoRepository.findByOrdenId(ordenId).map(pagoMapper::toResponse);
+    }
+
     private Pago buscarOFallar(Long id) {
         return pagoRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Pago no encontrado: " + id));
