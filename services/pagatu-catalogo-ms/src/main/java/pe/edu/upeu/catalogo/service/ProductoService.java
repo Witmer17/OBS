@@ -10,11 +10,13 @@ import pe.edu.upeu.catalogo.mapper.ProductoMapper;
 import pe.edu.upeu.catalogo.repository.CategoriaRepository;
 import pe.edu.upeu.catalogo.repository.ProductoRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ProductoService {
@@ -30,15 +32,19 @@ public class ProductoService {
     }
 
     public ProductoResponse obtener(Long id) {
+        log.info("Consultando producto id={}", id);
         return productoMapper.toResponse(buscarOFallar(id));
     }
 
+    @Transactional
     public ProductoResponse crear(ProductoRequest request) {
+        Categoria categoria = buscarCategoriaOFallar(request.getCategoriaId());
         Producto producto = productoMapper.toEntity(request);
-        producto.setCategoria(buscarCategoriaOFallar(request.getCategoriaId()));
+        producto.setCategoria(categoria);
         return productoMapper.toResponse(productoRepository.save(producto));
     }
 
+    @Transactional
     public ProductoResponse actualizar(Long id, ProductoRequest request) {
         Producto producto = buscarOFallar(id);
         producto.setNombre(request.getNombre());
@@ -56,6 +62,7 @@ public class ProductoService {
 
     @Transactional
     public void descontarStock(Long id, Integer cantidad) {
+        log.info("Descontando stock id={}, cantidad={}", id, cantidad);
         Producto producto = buscarOFallar(id);
         if (producto.getStock() < cantidad) {
             throw new StockInsuficienteException("Stock insuficiente para el producto: " + id);
@@ -66,6 +73,7 @@ public class ProductoService {
 
     @Transactional
     public void restaurarStock(Long id, Integer cantidad) {
+        log.info("Restaurando stock id={}, cantidad={}", id, cantidad);
         Producto producto = buscarOFallar(id);
         producto.setStock(producto.getStock() + cantidad);
         productoRepository.save(producto);
